@@ -4,6 +4,7 @@
 *.dll
 *.so
 *.dylib
+*.a
 
 # Test binary, build with `go test -c`
 *.test
@@ -13,3 +14,7 @@
 
 # JetBrains dir
 .idea/
+
+# Project dirs
+bin/
+pkg/
