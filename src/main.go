@@ -140,7 +140,7 @@ func icommands(s *discordgo.Session, m discordgo.Message) error {
 		}
 	}
 
-	commands.Invoke(s, command, uMember, &m, args)
+	go commands.Invoke(s, command, uMember, &m, args)
 
 	return nil
 }
