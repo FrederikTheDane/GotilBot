@@ -5,6 +5,7 @@ import (
 	"helpers"
 	"fmt"
 	"time"
+	"strconv"
 )
 
 type TestPerms struct {}
@@ -19,7 +20,7 @@ func (t *TestPerms) Run(uMember helpers.UMember, m *discordgo.Message, args []st
 		"You have the base perms: \n" +
 		"%b \n" +
 		"\n" +
-		"You have the channel perms: \n" +
+		"You have the listener perms: \n" +
 		"%b \n" +
 		"\n" +
 		"Total perms: \n" +
@@ -32,8 +33,8 @@ func (t *TestPerms) Name() string {
 	return "testperms"
 }
 
-func (t *TestPerms) UserPermissions() int {
-	return 0
+func (t *TestPerms) UserPermissions() (int, int) {
+	return 0, helpers.BasePerms
 }
 
 
@@ -45,15 +46,31 @@ func (*ChannelMessages) Help() string {
 }
 
 func (*ChannelMessages) Run(uMember helpers.UMember, message *discordgo.Message, args []string) {
-
+	if len(args) == 0 {
+		uMember.Session.ChannelMessageSend(message.ChannelID, "Please provide a number")
+		return
+	}
+	limitstring := args[0]
+	limit, err := strconv.Atoi(limitstring)
+	if err != nil || limit > 100 || limit < 1{
+		uMember.Session.ChannelMessageSend(message.ChannelID, fmt.Sprintf("%v is not a valid number! Choose a number from 1 to 100", limitstring))
+		return
+	}
+	msgs, err := uMember.Session.ChannelMessages(message.ChannelID, limit, "", "", "")
+	var msgsTime []string
+	for k, v := range msgs {
+		msgsTime = append(msgsTime, fmt.Sprintf("%v: %v \n", k, v.Timestamp))
+	}
+	uMember.Session.ChannelMessageSend(message.ChannelID, fmt.Sprintf("%v, %v", msgsTime, err))
+	return
 }
 
 func (*ChannelMessages) Name() string {
 	return "chanmessages"
 }
 
-func (*ChannelMessages) UserPermissions() int {
-	return discordgo.PermissionAdministrator
+func (*ChannelMessages) UserPermissions() (int, int) {
+	return discordgo.PermissionAdministrator, helpers.GuildPerms
 }
 
 
@@ -70,8 +87,10 @@ func (*TimeTest) Run(uMember helpers.UMember, message *discordgo.Message, args [
 	uMember.Session.ChannelMessageSend(message.ChannelID, "Fetching activity... This will take a while")
 	weekAgo := time.Now().Add(-24*7*time.Hour)
 	uMember.Session.ChannelMessageSend(message.ChannelID, fmt.Sprintf("A week ago the time was %v", weekAgo))
+	msgMap := make(map[string]int)
 	history := helpers.ChannelHistory{
 		Session:      uMember.Session,
+		MessageCount: msgMap,
 		ChannelID:    message.ChannelID,
 	}
 	uMember.Session.ChannelMessageSend(message.ChannelID, "Mapping messages to users... This is the heavy part")
@@ -95,6 +114,6 @@ func (*TimeTest) Name() string {
 	return "timetest"
 }
 
-func (*TimeTest) UserPermissions() int {
-	return discordgo.PermissionAdministrator
+func (*TimeTest) UserPermissions() (int, int) {
+	return discordgo.PermissionAdministrator, helpers.GuildPerms
 }

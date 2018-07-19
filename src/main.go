@@ -22,7 +22,6 @@ var (
 	dg *discordgo.Session
 	err error
 	discordBot *bot.Bot
-	botCommands map[string]commands.Command
 )
 
 type CommandNotFoundError struct {
@@ -54,6 +53,7 @@ func main() {
 
 	// Register the messageCreate func as a callback for MessageCreate events.
 	dg.AddHandler(onMessage)
+	dg.AddHandler(onGuildJoin)
 
 	// Open a websocket connection to Discord and begin listening.
 	err = dg.Open()
@@ -62,13 +62,23 @@ func main() {
 		return
 	}
 
-	botCommands = make(map[string]commands.Command)
+	botCommands := make(map[string]helpers.Command)
+	botPassiveCommands := make(map[string]helpers.PassiveCommand)
 
-	commandList := []commands.Command{
+	passiveCommandList := []helpers.PassiveCommand{
 		&commands.TopActive{},
+	}
+
+	for _, v := range passiveCommandList {
+		botPassiveCommands[v.Name()] = v
+	}
+
+	commandList := []helpers.Command{
 		&commands.TestPerms{},
 		&commands.Ping{},
 		&commands.TimeTest{},
+		&commands.ChannelMessages{},
+		&commands.RussianRoulette{},
 	}
 
 	for _, v := range commandList {
@@ -76,22 +86,25 @@ func main() {
 	}
 
 
-	discordBot = &bot.Bot{
-		Session:  dg,
-		User:     dg.State.User,
-		Prefix:   Prefix,
-		Commands: botCommands,
+	guildsMap := make(map[string]*helpers.UGuild)
+
+	for _, v := range dg.State.Guilds {
+		uGuild := helpers.GetUGuild(v)
+		guildsMap[v.ID] = uGuild
+		for _, c := range passiveCommandList {
+			guildsMap[v.ID].RunningCommands[c.Name()] = c
+			guildsMap[v.ID].CommandsChannels[c.Name()] = make(chan []string)
+		}
 	}
 
-	/*
-	stop := make(chan bool)
-
-	//go commands.TopActive(stop)
-
-	time.Sleep(1*time.Second)
-
-	stop <- true
-	*/
+	discordBot = &bot.Bot{
+		Session:         dg,
+		User:            dg.State.User,
+		Prefix:          Prefix,
+		Commands:        botCommands,
+		PassiveCommands: botPassiveCommands,
+		Guilds:          guildsMap,
+	}
 
 	// Wait here until CTRL-C or other term signal is received.
 	fmt.Println("Bot is now running.  Press CTRL-C to exit.")
@@ -116,21 +129,49 @@ func onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 	}
 
 	//Process command, if the message is prefixed with the given Prefix
+	if len(m.Content) <= len(Prefix){
+		return
+	}
+
 	if m.Content[:len(Prefix)] == Prefix {
-		if err := icommands(s, message); err != nil {
+		if err :=  icommands(s, message); err != nil {
 			fmt.Println(err)
 		}
 	}
 }
 
+func onGuildJoin(s *discordgo.Session, g *discordgo.GuildCreate) {
+
+}
 
 func icommands(s *discordgo.Session, m discordgo.Message) error {
-	uMember := helpers.GetUMember(s, m)
+	var command helpers.Command
+	var exists bool
 
-	command, exists := discordBot.Commands[m.Content[len(Prefix):]]
+	uMember := helpers.GetUMember(s, m, discordBot.Guilds[helpers.GetGuild(s, m.ChannelID).ID])
 
-	args := strings.Fields(m.Content)
-	args = args[1:]
+	msgFields := strings.Fields(m.Content[len(Prefix):])
+	args := msgFields[1:]
+
+
+
+	if command, exists = discordBot.Commands[msgFields[0]]; exists {
+		helpers.Invoke(s, command, *uMember, &m, args)
+		return nil
+	} else if command, exists = discordBot.PassiveCommands[msgFields[0]]; exists {
+		fmt.Println("Command exists!")
+		guild := helpers.GetGuild(s, m.ChannelID)
+		//uGuild := helpers.GetUGuild(guild)
+
+		command := command.(helpers.PassiveCommand)
+		command = discordBot.Guilds[guild.ID].RunningCommands[command.Name()]
+		channel := discordBot.Guilds[guild.ID].CommandsChannels[command.Name()]
+		channel = helpers.Invoke(s, command, *uMember, &m, args)
+		channel <- args
+
+		return nil
+	}
+
 
 	if !exists{
 		return &CommandNotFoundError{
@@ -139,8 +180,5 @@ func icommands(s *discordgo.Session, m discordgo.Message) error {
 			m.Author,
 		}
 	}
-
-	go commands.Invoke(s, command, uMember, &m, args)
-
 	return nil
 }

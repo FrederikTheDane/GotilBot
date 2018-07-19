@@ -19,6 +19,6 @@ func (p *Ping) Name() string {
 	return  "ping"
 }
 
-func (p *Ping) UserPermissions() int {
-	return 0
+func (p *Ping) UserPermissions() (int, int) {
+	return 0, helpers.BasePerms
 }

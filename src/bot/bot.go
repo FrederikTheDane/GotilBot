@@ -2,12 +2,14 @@ package bot
 
 import (
 	"github.com/bwmarrin/discordgo"
-	"commands"
+	"helpers"
 )
 
 type Bot struct {
 	Session *discordgo.Session
 	User *discordgo.User
 	Prefix string
-	Commands map[string]commands.Command
+	Commands map[string]helpers.Command
+	PassiveCommands map[string]helpers.PassiveCommand
+	Guilds map[string]*helpers.UGuild
 }
